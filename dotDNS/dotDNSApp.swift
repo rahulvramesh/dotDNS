@@ -11,7 +11,12 @@ struct dotDNSApp: App {
                     minHeight: Constants.UI.minWindowHeight
                 )
         }
-        .windowStyle(.hiddenTitleBar)
-        .windowToolbarStyle(.unified)
+        //.windowStyle(.hiddenTitleBar)
+        .windowToolbarStyle(.unifiedCompact)
     }
+}
+
+
+#Preview {
+    ContentView()
 }

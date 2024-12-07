@@ -32,12 +32,46 @@ class CloudflareService {
             throw CloudflareServiceError.invalidCredentials
         }
         
-        return try await networkManager.request(
+        let data = try await networkManager.request(
             url,
             method: method,
             headers: headers,
             body: body
         )
+        
+        // Add debug printing of raw response
+        if let responseString = String(data: data, encoding: .utf8) {
+            print("Debug - Raw API response: \(responseString)")
+        }
+        
+        let decoder = JSONDecoder()
+        do {
+            return try decoder.decode(T.self, from: data)
+        } catch {
+            print("Debug - Decoding error: \(error)")
+            throw error
+        }
+    }
+
+    func getDomains() async throws -> [CloudflareDomain] {
+        let endpoint = "/zones"
+        
+        // Add debug print for the request
+        print("Debug - Requesting domains from Cloudflare...")
+        
+        let response: CloudflareDomainsResponse = try await makeRequest(endpoint: endpoint)
+        
+        // Add debug print for the response
+        print("Debug - Got response with success: \(response.success)")
+        if !response.success {
+            print("Debug - Errors: \(response.errors)")
+        }
+        
+        guard response.success else {
+            throw CloudflareServiceError.apiError(response.errors.first?.message ?? "Unknown error")
+        }
+        
+        return response.result
     }
     
     func verifyCredentials() async throws {

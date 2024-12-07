@@ -57,12 +57,12 @@ class NetworkManager: ObservableObject {
         }
     }
     
-    func request<T: Decodable>(
+    func request(
         _ url: URL,
         method: String = "GET",
         headers: [String: String] = [:],
         body: Data? = nil
-    ) async throws -> T {
+    ) async throws -> Data {  // Changed to return Data directly
         try await checkConnection()
         
         var request = URLRequest(url: url)
@@ -85,14 +85,7 @@ class NetworkManager: ObservableObject {
             
             switch httpResponse.statusCode {
             case 200...299:
-                let decoder = JSONDecoder()
-                decoder.keyDecodingStrategy = .convertFromSnakeCase
-                do {
-                    return try decoder.decode(T.self, from: data)
-                } catch let decodingError as DecodingError {
-                    let errorDescription = self.describingDecodingError(decodingError)
-                    throw NetworkError.decodingError(errorDescription)
-                }
+                return data
             case 401, 403:
                 throw NetworkError.serverError(httpResponse.statusCode)
             case 404:

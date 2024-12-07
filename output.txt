@@ -4,20 +4,19 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>com.apple.security.app-sandbox</key>
-    <true/>
-    <key>com.apple.security.files.user-selected.read-only</key>
-    <true/>
-    <key>com.apple.security.network.client</key>
-    <true/>
-    <key>com.apple.security.network.server</key>
-    <true/>
-    <key>com.apple.security.temporary-exception.files.home-relative-path.read-write</key>
-    <array>
-        <string>Library/Application Support/dotDNS/</string>
-    </array>
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+	<key>com.apple.security.files.downloads.read-write</key>
+	<true/>
+	<key>com.apple.security.files.user-selected.read-write</key>
+	<true/>
+	<key>com.apple.security.network.client</key>
+	<true/>
+	<key>com.apple.security.network.server</key>
+	<true/>
 </dict>
 </plist>
+
 === End of ./dotDNS/dotDNS.entitlements ===
 
 ----------------------------------------------------------------
@@ -860,11 +859,13 @@ class DashboardViewModel: ObservableObject {
 
 === File: ./dotDNS/Features/Dashboard/Views/DashboardView.swift ===
 
+// DashboardView.swift
 import SwiftUI
 
 struct DashboardView: View {
-    @StateObject private var viewModel = DashboardViewModel()
-    @StateObject private var providersViewModel = ProvidersViewModel()
+    // Change access level from private to internal
+    @StateObject var viewModel = DashboardViewModel()
+    @StateObject var providersViewModel = ProvidersViewModel()
     @State private var showAddProvider = false
     
     var body: some View {
@@ -906,7 +907,8 @@ struct DashboardView: View {
         }
     }
     
-    private var toolbar: some View {
+    // Make toolbar internal instead of private
+    var toolbar: some View {
         HStack {
             Text("Dashboard")
                 .font(.title)
@@ -931,7 +933,8 @@ struct DashboardView: View {
         .padding()
     }
     
-    private func statsCard(title: String, value: String, icon: String) -> some View {
+    // Make statsCard internal instead of private
+    func statsCard(title: String, value: String, icon: String) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Image(systemName: icon)
@@ -962,19 +965,16 @@ struct DashboardView: View {
     }
 }
 
-#Preview {
-    DashboardView()
-}
-
 === End of ./dotDNS/Features/Dashboard/Views/DashboardView.swift ===
 
 ----------------------------------------------------------------
 
 === File: ./dotDNS/Features/Dashboard/Views/DashboardView+Extensions.swift ===
 
+// DashboardView+Extensions.swift
 import SwiftUI
 
-// MARK: - Domains List Extension
+
 extension DashboardView {
     var domainsList: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -999,10 +999,7 @@ extension DashboardView {
             }
         }
     }
-}
-
-// MARK: - Recent Activity Extension
-extension DashboardView {
+    
     var recentActivitySection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Recent Activity")
@@ -1026,7 +1023,7 @@ extension DashboardView {
     }
 }
 
-// MARK: - Supporting Views
+// Supporting Views
 struct DomainRowView: View {
     let domain: Domain
     let onManage: () -> Void
@@ -1062,7 +1059,7 @@ struct ActivityRowView: View {
     var body: some View {
         HStack {
             Image(systemName: activity.icon)
-                .foregroundStyle(.accentColor)
+                .foregroundStyle(Color.accentColor)
                 .frame(width: 24, height: 24)
             
             VStack(alignment: .leading, spacing: 4) {
@@ -1083,26 +1080,6 @@ struct ActivityRowView: View {
         .background(Color(NSColor.controlBackgroundColor))
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
-}
-
-// MARK: - Preview Provider
-#Preview {
-    VStack {
-        DomainRowView(
-            domain: Domain.preview,
-            onManage: {}
-        )
-        
-        ActivityRowView(
-            activity: DashboardViewModel.ActivityItem(
-                title: "DNS Record Updated",
-                timestamp: Date(),
-                domain: "example.com",
-                icon: "arrow.up.circle"
-            )
-        )
-    }
-    .padding()
 }
 
 === End of ./dotDNS/Features/Dashboard/Views/DashboardView+Extensions.swift ===
@@ -1667,7 +1644,6 @@ extension CloudflareService {
         }
     }
 }
-
 === End of ./dotDNS/Services/Providers/CloudflareService.swift ===
 
 ----------------------------------------------------------------
@@ -1817,7 +1793,7 @@ enum KeychainError: Error {
 }
 
 class KeychainService {
-    private static let service = "com.yourdomain.dotDNS"
+    private static let service = "com.rahulvramesh.dotDNS"
     
     static func saveCredentials(key: String, value: String) throws {
         let query: [String: Any] = [
@@ -1903,6 +1879,7 @@ class KeychainService {
         }
     }
 }
+
 === End of ./dotDNS/Services/KeychainService.swift ===
 
 ----------------------------------------------------------------
