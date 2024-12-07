@@ -1,10 +1,4 @@
-//
-//  dotDNSApp.swift
-//  dotDNS
-//
-//  Created by Rahul VR on 07/12/24.
-//
-
+// dotDNSApp.swift
 import SwiftUI
 
 @main
@@ -12,6 +6,12 @@ struct dotDNSApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .frame(
+                    minWidth: Constants.UI.minWindowWidth,
+                    minHeight: Constants.UI.minWindowHeight
+                )
         }
+        .windowStyle(.hiddenTitleBar)
+        .windowToolbarStyle(.unified)
     }
 }

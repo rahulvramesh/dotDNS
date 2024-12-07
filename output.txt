@@ -1,0 +1,1960 @@
+=== File: ./dotDNS/dotDNS.entitlements ===
+
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>com.apple.security.app-sandbox</key>
+    <true/>
+    <key>com.apple.security.files.user-selected.read-only</key>
+    <true/>
+    <key>com.apple.security.network.client</key>
+    <true/>
+    <key>com.apple.security.network.server</key>
+    <true/>
+    <key>com.apple.security.temporary-exception.files.home-relative-path.read-write</key>
+    <array>
+        <string>Library/Application Support/dotDNS/</string>
+    </array>
+</dict>
+</plist>
+=== End of ./dotDNS/dotDNS.entitlements ===
+
+----------------------------------------------------------------
+
+=== File: ./dotDNS/Features/Records/ViewModels/AddDNSRecordViewModel.swift ===
+
+import SwiftUI
+
+@MainActor
+class AddDNSRecordViewModel: ObservableObject {
+    @Published var recordType: RecordType = .a
+    @Published var name: String = ""
+    @Published var content: String = ""
+    @Published var ttl: Int = 3600
+    @Published var priority: Int = 0
+    @Published var isLoading = false
+    @Published var errorMessage: String?
+    
+    var isValid: Bool {
+        !name.isEmpty && !content.isEmpty && ttl >= 60
+    }
+    
+    func addRecord(to domain: Domain) async {
+        guard isValid else { return }
+        isLoading = true
+        defer { isLoading = false }
+        
+        do {
+            let record = DNSRecord(
+                type: recordType,
+                name: name,
+                content: content,
+                ttl: ttl,
+                priority: recordType == .mx || recordType == .srv ? priority : nil,
+                provider: domain.provider
+            )
+            
+            // TODO: Implement the actual API call based on provider type
+            try await addRecordToProvider(record, domain: domain)
+            
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+    
+    private func addRecordToProvider(_ record: DNSRecord, domain: Domain) async throws {
+        switch domain.provider.type {
+        case .cloudflare:
+            // TODO: Implement Cloudflare record creation
+            break
+        case .nameDotCom:
+            // TODO: Implement Name.com record creation
+            break
+        case .godaddy:
+            // TODO: Implement GoDaddy record creation
+            break
+        case .route53:
+            // TODO: Implement Route53 record creation
+            break
+        }
+    }
+}
+
+=== End of ./dotDNS/Features/Records/ViewModels/AddDNSRecordViewModel.swift ===
+
+----------------------------------------------------------------
+
+=== File: ./dotDNS/Features/Records/ViewModels/DNSRecordListViewModel.swift ===
+
+import Foundation
+import Combine
+
+@MainActor
+class DNSRecordListViewModel: ObservableObject {
+    @Published var records: [DNSRecord] = []
+    @Published var isLoading = false
+    @Published var errorMessage: String?
+    
+    private var cancellables = Set<AnyCancellable>()
+    
+    func loadRecords(for domain: Domain) async {
+        isLoading = true
+        defer { isLoading = false }
+        
+        // TODO: Implement API call to load records
+        // This should use the appropriate provider service based on domain.provider.type
+    }
+    
+    func editRecord(_ record: DNSRecord) {
+        // TODO: Show edit record sheet
+    }
+    
+    func deleteRecords(at indexSet: IndexSet) async {
+        guard let provider = records.first?.provider else { return }
+        
+        do {
+            for index in indexSet {
+                let record = records[index]
+                try await deleteRecord(record, using: provider)
+                records.remove(at: index)
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+    
+    private func deleteRecord(_ record: DNSRecord, using provider: Provider) async throws {
+        // TODO: Implement API call to delete record
+        // This should use the appropriate provider service based on provider.type
+    }
+}
+=== End of ./dotDNS/Features/Records/ViewModels/DNSRecordListViewModel.swift ===
+
+----------------------------------------------------------------
+
+=== File: ./dotDNS/Features/Records/Views/AddDNSRecordView.swift ===
+
+import SwiftUI
+
+struct AddDNSRecordView: View {
+    @Environment(\.dismiss) private var dismiss
+    @StateObject private var viewModel = AddDNSRecordViewModel()
+    let domain: Domain
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header
+            HStack {
+                Text("Add DNS Record")
+                    .font(.title2)
+                    .fontWeight(.bold)
+                
+                Spacer()
+                
+                Button("Cancel") {
+                    dismiss()
+                }
+                .keyboardShortcut(.escape)
+            }
+            .padding()
+            .background(Color(NSColor.windowBackgroundColor))
+            
+            // Form
+            Form {
+                Section("Record Details") {
+                    Picker("Record Type", selection: $viewModel.recordType) {
+                        ForEach(RecordType.allCases, id: \.self) { type in
+                            Text(type.rawValue).tag(type)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    
+                    TextField("Name", text: $viewModel.name)
+                        .textFieldStyle(.roundedBorder)
+                    
+                    TextField("Content", text: $viewModel.content)
+                        .textFieldStyle(.roundedBorder)
+                    
+                    if viewModel.recordType == .mx || viewModel.recordType == .srv {
+                        Stepper("Priority: \(viewModel.priority)", value: $viewModel.priority, in: 0...65535)
+                    }
+                    
+                    Stepper("TTL: \(viewModel.ttl) seconds", value: $viewModel.ttl, in: 60...86400, step: 60)
+                }
+            }
+            .padding()
+            .disabled(viewModel.isLoading)
+            
+            if let error = viewModel.errorMessage {
+                Text(error)
+                    .foregroundColor(.red)
+                    .padding()
+            }
+            
+            // Footer
+            HStack {
+                Spacer()
+                
+                if viewModel.isLoading {
+                    ProgressView()
+                        .controlSize(.small)
+                        .padding(.trailing)
+                }
+                
+                Button("Add Record") {
+                    Task {
+                        await viewModel.addRecord(to: domain)
+                        if viewModel.errorMessage == nil {
+                            dismiss()
+                        }
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!viewModel.isValid || viewModel.isLoading)
+            }
+            .padding()
+            .background(Color(NSColor.windowBackgroundColor))
+        }
+        .frame(width: 400)
+    }
+}
+
+// Preview Provider
+struct AddDNSRecordView_Previews: PreviewProvider {
+    static var previews: some View {
+        AddDNSRecordView(domain: Domain.preview)
+    }
+}
+
+=== End of ./dotDNS/Features/Records/Views/AddDNSRecordView.swift ===
+
+----------------------------------------------------------------
+
+=== File: ./dotDNS/Features/Records/Views/DNSRecordListView.swift ===
+
+import SwiftUI
+
+struct DNSRecordListView: View {
+    let domain: Domain
+    @StateObject private var viewModel = DNSRecordListViewModel()
+    @State private var showAddRecord = false
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Toolbar
+            HStack {
+                Text("\(domain.name) Records")
+                    .font(.title2)
+                    .fontWeight(.bold)
+                
+                Spacer()
+                
+                Button(action: { showAddRecord.toggle() }) {
+                    Label("Add Record", systemImage: "plus")
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            .padding()
+            .background(Color(NSColor.windowBackgroundColor))
+            
+            // Records List
+            if viewModel.isLoading {
+                ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                List {
+                    ForEach(viewModel.records) { record in
+                        DNSRecordRow(record: record) {
+                            viewModel.editRecord(record)
+                        }
+                    }
+                    .onDelete { indexSet in
+                        Task {
+                            await viewModel.deleteRecords(at: indexSet)
+                        }
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $showAddRecord) {
+            AddDNSRecordView(domain: domain)
+        }
+        .onAppear {
+            Task {
+                await viewModel.loadRecords(for: domain)
+            }
+        }
+    }
+}
+
+struct DNSRecordRow: View {
+    let record: DNSRecord
+    let onEdit: () -> Void
+    
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(record.name)
+                    .fontWeight(.medium)
+                Text(record.type.rawValue)
+                    .font(.caption)
+                    .padding(4)
+                    .background(Color.accentColor.opacity(0.1))
+                    .cornerRadius(4)
+            }
+            
+            Spacer()
+            
+            Text(record.content)
+                .foregroundColor(.secondary)
+            
+            Button("Edit") {
+                onEdit()
+            }
+            .buttonStyle(.bordered)
+        }
+        .padding(.vertical, 4)
+    }
+}
+=== End of ./dotDNS/Features/Records/Views/DNSRecordListView.swift ===
+
+----------------------------------------------------------------
+
+=== File: ./dotDNS/Features/Providers/ViewModels/ProvidersViewModel.swift ===
+
+import SwiftUI
+
+@MainActor
+class ProvidersViewModel: ObservableObject {
+    @Published var providers: [Provider] = []
+    @Published var isLoading = false
+    @Published var errorMessage: String?
+    
+    func loadProviders() {
+        Task {
+            isLoading = true
+            defer { isLoading = false }
+            
+            do {
+                providers = try await ProviderStorage.shared.loadProviders()
+            } catch {
+                errorMessage = "Failed to load providers: \(error.localizedDescription)"
+            }
+        }
+    }
+    
+    func addProvider(_ provider: Provider) {
+        Task {
+            do {
+                try await ProviderStorage.shared.addProvider(provider)
+                await loadProviders()
+            } catch {
+                errorMessage = "Failed to add provider: \(error.localizedDescription)"
+            }
+        }
+    }
+    
+    func removeProvider(_ provider: Provider) {
+        Task {
+            do {
+                try await ProviderStorage.shared.removeProvider(provider)
+                await loadProviders()
+            } catch {
+                errorMessage = "Failed to remove provider: \(error.localizedDescription)"
+            }
+        }
+    }
+    
+    func updateProvider(_ provider: Provider) {
+        Task {
+            do {
+                try await ProviderStorage.shared.updateProvider(provider)
+                await loadProviders()
+            } catch {
+                errorMessage = "Failed to update provider: \(error.localizedDescription)"
+            }
+        }
+    }
+}
+
+=== End of ./dotDNS/Features/Providers/ViewModels/ProvidersViewModel.swift ===
+
+----------------------------------------------------------------
+
+=== File: ./dotDNS/Features/Providers/ViewModels/AddProviderViewModel.swift ===
+
+import SwiftUI
+
+@MainActor
+class AddProviderViewModel: ObservableObject {
+    @Published var selectedProviderType: ProviderType = .cloudflare
+    @Published var apiToken = ""
+    @Published var email = ""
+    @Published var globalApiKey = ""
+    @Published var useApiToken = true
+    @Published var saveCredentials = true
+    @Published var verifyConnection = true
+    @Published var isLoading = false
+    @Published var errorMessage: String?
+    @Published var isAuthenticated = false
+    @Published var userName: String?
+    @Published var userEmail: String?
+    
+    private var networkManager: NetworkManager
+    private var providersViewModel: ProvidersViewModel
+    
+    init(networkManager: NetworkManager = .shared, providersViewModel: ProvidersViewModel) {
+        self.networkManager = networkManager
+        self.providersViewModel = providersViewModel
+    }
+    
+    var isValid: Bool {
+        switch selectedProviderType {
+        case .cloudflare:
+            if useApiToken {
+                return !apiToken.isEmpty
+            } else {
+                return !email.isEmpty && !globalApiKey.isEmpty
+            }
+        default:
+            return false
+        }
+    }
+    
+    func addProvider() async {
+        guard isValid else { return }
+        
+        isLoading = true
+        errorMessage = nil
+        
+        do {
+            switch selectedProviderType {
+            case .cloudflare:
+                try await addCloudflareProvider()
+            default:
+                throw ProviderError.unsupportedProvider
+            }
+            
+            if saveCredentials {
+                try await saveToKeychain()
+            }
+            
+            isAuthenticated = true
+            
+        } catch let error as NetworkError {
+            errorMessage = error.localizedDescription
+            isAuthenticated = false
+        } catch let error as CloudflareServiceError {
+            errorMessage = error.localizedDescription
+            isAuthenticated = false
+        } catch {
+            errorMessage = error.localizedDescription
+            isAuthenticated = false
+        }
+        
+        isLoading = false
+    }
+    
+    private func addCloudflareProvider() async throws {
+        let credentials: CloudflareCredentials
+        
+        if useApiToken {
+            credentials = .withToken(apiToken)
+        } else {
+            credentials = .withGlobalKey(email: email, key: globalApiKey)
+        }
+        
+        let service = CloudflareService(credentials: credentials, networkManager: networkManager)
+        
+        if verifyConnection {
+            try await service.verifyCredentials()
+            let userDetails = try await service.getUserDetails()
+            
+            userName = userDetails.fullName
+            userEmail = userDetails.email
+            
+            // Create and store the provider
+            let provider = Provider(
+                name: userDetails.email,
+                type: .cloudflare,
+                isConnected: true,
+                email: userDetails.email,
+                credentials: .cloudflare(credentials)
+            )
+            
+            providersViewModel.addProvider(provider)
+        }
+    }
+    
+    private func saveToKeychain() async throws {
+        let prefix = "cloudflare"
+        
+        if useApiToken {
+            try await KeychainService.saveCredentials(
+                key: "\(prefix)_api_token",
+                value: apiToken
+            )
+        } else {
+            try await KeychainService.saveCredentials(
+                key: "\(prefix)_email",
+                value: email
+            )
+            try await KeychainService.saveCredentials(
+                key: "\(prefix)_global_key",
+                value: globalApiKey
+            )
+        }
+    }
+}
+
+=== End of ./dotDNS/Features/Providers/ViewModels/AddProviderViewModel.swift ===
+
+----------------------------------------------------------------
+
+=== File: ./dotDNS/Features/Providers/Views/AddProviderView.swift ===
+
+import SwiftUI
+
+struct AddProviderView: View {
+    @Environment(\.dismiss) private var dismiss
+    @StateObject private var viewModel: AddProviderViewModel
+    
+    init(providersViewModel: ProvidersViewModel) {
+        _viewModel = StateObject(wrappedValue: AddProviderViewModel(providersViewModel: providersViewModel))
+    }
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header
+            HStack {
+                Text("Add DNS Provider")
+                    .font(.title2)
+                    .fontWeight(.bold)
+                
+                Spacer()
+                
+                Button("Cancel") {
+                    dismiss()
+                }
+                .keyboardShortcut(.escape)
+            }
+            .padding()
+            .background(Color(NSColor.windowBackgroundColor))
+            
+            // Form
+            Form {
+                providerSection
+                
+                if viewModel.selectedProviderType == .cloudflare {
+                    cloudflareSection
+                }
+                
+                optionsSection
+                
+                if viewModel.isAuthenticated {
+                    successSection
+                }
+            }
+            .padding()
+            .disabled(viewModel.isLoading)
+            
+            if let error = viewModel.errorMessage {
+                Text(error)
+                    .foregroundColor(.red)
+                    .padding()
+            }
+            
+            // Footer
+            HStack {
+                Spacer()
+                
+                if viewModel.isLoading {
+                    ProgressView()
+                        .controlSize(.small)
+                        .padding(.trailing)
+                }
+                
+                Button("Add Provider") {
+                    Task {
+                        await viewModel.addProvider()
+                        if viewModel.isAuthenticated {
+                            dismiss()
+                        }
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!viewModel.isValid || viewModel.isLoading)
+            }
+            .padding()
+            .background(Color(NSColor.windowBackgroundColor))
+        }
+        .frame(width: 400)
+    }
+    
+    private var providerSection: some View {
+        Section("Provider") {
+            Picker("Provider Type", selection: $viewModel.selectedProviderType) {
+                ForEach(ProviderType.allCases, id: \.self) { type in
+                    Text(type.rawValue).tag(type)
+                }
+            }
+        }
+    }
+    
+    private var cloudflareSection: some View {
+        Section("Authentication") {
+            Picker("Authentication Method", selection: $viewModel.useApiToken) {
+                Text("API Token").tag(true)
+                Text("Global API Key").tag(false)
+            }
+            .pickerStyle(.segmented)
+            
+            if viewModel.useApiToken {
+                SecureField("API Token", text: $viewModel.apiToken)
+                Text("API Tokens are the recommended way to authenticate with Cloudflare API")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            } else {
+                TextField("Email", text: $viewModel.email)
+                SecureField("Global API Key", text: $viewModel.globalApiKey)
+                Text("Global API Keys have full account access. API Tokens are recommended instead.")
+                    .font(.caption)
+                    .foregroundColor(.orange)
+            }
+        }
+    }
+    
+    private var optionsSection: some View {
+        Section("Options") {
+            Toggle("Save credentials securely", isOn: $viewModel.saveCredentials)
+            Toggle("Verify connection", isOn: $viewModel.verifyConnection)
+        }
+    }
+    
+    private var successSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 8) {
+                Label("Successfully connected", systemImage: "checkmark.circle.fill")
+                    .foregroundColor(.green)
+                
+                if let name = viewModel.userName {
+                    Text("Name: \(name)")
+                        .font(.caption)
+                }
+                
+                if let email = viewModel.userEmail {
+                    Text("Email: \(email)")
+                        .font(.caption)
+                }
+            }
+        }
+    }
+}
+
+=== End of ./dotDNS/Features/Providers/Views/AddProviderView.swift ===
+
+----------------------------------------------------------------
+
+=== File: ./dotDNS/Features/Providers/Views/ProvidersView.swift ===
+
+import SwiftUI
+
+struct ProvidersView: View {
+    @StateObject private var viewModel = ProvidersViewModel()
+    @State private var showAddProvider = false
+    @State private var selectedProvider: Provider?
+    @State private var showDeleteAlert = false
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Toolbar
+            HStack {
+                Text("DNS Providers")
+                    .font(.title)
+                    .fontWeight(.bold)
+                
+                Spacer()
+                
+                Button(action: { showAddProvider.toggle() }) {
+                    Label("Add Provider", systemImage: "plus")
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            .padding()
+            .background(Color(NSColor.windowBackgroundColor))
+            
+            if viewModel.errorMessage != nil {
+                ErrorBanner(message: viewModel.errorMessage!)
+            }
+            
+            // Providers List
+            if viewModel.isLoading {
+                ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if viewModel.providers.isEmpty {
+                EmptyStateView()
+            } else {
+                List(viewModel.providers) { provider in
+                    ProviderRowView(provider: provider) {
+                        selectedProvider = provider
+                        showDeleteAlert = true
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $showAddProvider) {
+            AddProviderView(providersViewModel: viewModel)
+        }
+        .alert("Remove Provider?", isPresented: $showDeleteAlert) {
+            Button("Cancel", role: .cancel) {}
+            Button("Remove", role: .destructive) {
+                if let provider = selectedProvider {
+                    viewModel.removeProvider(provider)
+                }
+            }
+        } message: {
+            if let provider = selectedProvider {
+                Text("Are you sure you want to remove \(provider.name)? This will not affect your DNS records but you will need to add the provider again to manage them.")
+            }
+        }
+        .onAppear {
+            viewModel.loadProviders()
+        }
+    }
+}
+
+struct ErrorBanner: View {
+    let message: String
+    
+    var body: some View {
+        HStack {
+            Image(systemName: "exclamationmark.triangle")
+            Text(message)
+            Spacer()
+        }
+        .padding()
+        .background(Color.red.opacity(0.1))
+        .foregroundColor(.red)
+    }
+}
+
+struct EmptyStateView: View {
+    var body: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "server.rack")
+                .font(.system(size: 48))
+                .foregroundColor(.secondary)
+            
+            Text("No DNS Providers")
+                .font(.title2)
+                .fontWeight(.bold)
+            
+            Text("Add your first DNS provider to start managing your domains")
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(NSColor.windowBackgroundColor))
+    }
+}
+
+struct ProviderRowView: View {
+    let provider: Provider
+    let onDelete: () -> Void
+    
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading) {
+                Text(provider.name)
+                    .font(.headline)
+                Text(provider.type.rawValue)
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            }
+            
+            Spacer()
+            
+            // Status Indicator
+            HStack {
+                Circle()
+                    .fill(provider.isConnected ? Color.green : Color.red)
+                    .frame(width: 8, height: 8)
+                Text(provider.isConnected ? "Connected" : "Disconnected")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Color(NSColor.windowBackgroundColor))
+            .cornerRadius(12)
+            
+            Menu {
+                Button("View Domains", action: {})
+                Button("Edit", action: {})
+                Divider()
+                Button("Remove", role: .destructive, action: onDelete)
+            } label: {
+                Image(systemName: "ellipsis.circle")
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding()
+    }
+}
+
+=== End of ./dotDNS/Features/Providers/Views/ProvidersView.swift ===
+
+----------------------------------------------------------------
+
+=== File: ./dotDNS/Features/Dashboard/ViewModels/DashboardViewModel.swift ===
+
+// Features/Dashboard/ViewModels/DashboardViewModel.swift
+import Foundation
+
+class DashboardViewModel: ObservableObject {
+    @Published var totalDomains = 0
+    @Published var totalRecords = 0
+    @Published var totalProviders = 0
+    @Published var expiringDomains = 0
+    @Published var recentActivities: [ActivityItem] = []
+    @Published var domains: [Domain] = []
+    @Published var isLoading = false
+    
+    struct ActivityItem: Identifiable {
+        let id = UUID()
+        let title: String
+        let timestamp: Date
+        let domain: String
+        let icon: String
+    }
+    
+    struct Trend {
+        let value: Int
+        let isPositive: Bool
+    }
+    
+    func loadData() {
+        isLoading = true
+        // Add network call here
+        isLoading = false
+    }
+    
+    func refresh() {
+        loadData()
+    }
+    
+    func getTrend(for metric: String) -> Trend? {
+        // Implement trend calculation
+        return nil
+    }
+    
+    func manageDomain(_ domain: Domain) {
+        // Implement domain management
+    }
+}
+
+=== End of ./dotDNS/Features/Dashboard/ViewModels/DashboardViewModel.swift ===
+
+----------------------------------------------------------------
+
+=== File: ./dotDNS/Features/Dashboard/Views/DashboardView.swift ===
+
+import SwiftUI
+
+struct DashboardView: View {
+    @StateObject private var viewModel = DashboardViewModel()
+    @StateObject private var providersViewModel = ProvidersViewModel()
+    @State private var showAddProvider = false
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Toolbar
+            toolbar
+                .background(Color(NSColor.windowBackgroundColor))
+            
+            // Main Content
+            ScrollView {
+                VStack(spacing: 20) {
+                    // Stats Grid
+                    LazyVGrid(columns: [
+                        GridItem(.flexible()),
+                        GridItem(.flexible())
+                    ], spacing: 20) {
+                        statsCard(title: "Total Domains", value: "\(viewModel.totalDomains)", icon: "globe")
+                        statsCard(title: "Active Records", value: "\(viewModel.totalRecords)", icon: "server.rack")
+                        statsCard(title: "DNS Providers", value: "\(viewModel.totalProviders)", icon: "network")
+                        statsCard(title: "Domains Expiring Soon", value: "\(viewModel.expiringDomains)", icon: "exclamationmark.triangle")
+                    }
+                    .padding(.horizontal)
+                    
+                    // Recent Activity
+                    recentActivitySection
+                    
+                    // Domains List
+                    domainsList
+                }
+                .padding(.vertical)
+            }
+        }
+        .sheet(isPresented: $showAddProvider) {
+            AddProviderView(providersViewModel: providersViewModel)
+        }
+        .onAppear {
+            viewModel.loadData()
+            providersViewModel.loadProviders()
+        }
+    }
+    
+    private var toolbar: some View {
+        HStack {
+            Text("Dashboard")
+                .font(.title)
+                .fontWeight(.bold)
+            
+            Spacer()
+            
+            Button(action: { showAddProvider.toggle() }) {
+                Label("Add Provider", systemImage: "plus")
+            }
+            .buttonStyle(.borderedProminent)
+            
+            Button(action: {
+                viewModel.refresh()
+                providersViewModel.loadProviders()
+            }) {
+                Label("Refresh", systemImage: "arrow.clockwise")
+            }
+            .buttonStyle(.bordered)
+        }
+        .frame(maxWidth: .infinity)
+        .padding()
+    }
+    
+    private func statsCard(title: String, value: String, icon: String) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Image(systemName: icon)
+                    .font(.title2)
+                
+                Text(title)
+                    .font(.headline)
+            }
+            
+            Text(value)
+                .font(.system(size: 34, weight: .bold))
+            
+            if let trend = viewModel.getTrend(for: title) {
+                HStack(spacing: 4) {
+                    Image(systemName: trend.isPositive ? "arrow.up" : "arrow.down")
+                    Text("\(trend.value)%")
+                    Text("vs last month")
+                        .foregroundColor(.secondary)
+                }
+                .font(.caption)
+                .foregroundStyle(trend.isPositive ? .green : .red)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
+        .background(Color(NSColor.controlBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+#Preview {
+    DashboardView()
+}
+
+=== End of ./dotDNS/Features/Dashboard/Views/DashboardView.swift ===
+
+----------------------------------------------------------------
+
+=== File: ./dotDNS/Features/Dashboard/Views/DashboardView+Extensions.swift ===
+
+import SwiftUI
+
+// MARK: - Domains List Extension
+extension DashboardView {
+    var domainsList: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Your Domains")
+                .font(.title2)
+                .fontWeight(.bold)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding([.horizontal, .top])
+            
+            if viewModel.domains.isEmpty {
+                Text("No domains found")
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical)
+            } else {
+                ForEach(viewModel.domains) { domain in
+                    DomainRowView(domain: domain) {
+                        viewModel.manageDomain(domain)
+                    }
+                    .padding(.horizontal)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Recent Activity Extension
+extension DashboardView {
+    var recentActivitySection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Recent Activity")
+                .font(.title2)
+                .fontWeight(.bold)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding([.horizontal, .top])
+            
+            if viewModel.recentActivities.isEmpty {
+                Text("No recent activity")
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical)
+            } else {
+                ForEach(viewModel.recentActivities) { activity in
+                    ActivityRowView(activity: activity)
+                        .padding(.horizontal)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Supporting Views
+struct DomainRowView: View {
+    let domain: Domain
+    let onManage: () -> Void
+    
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(domain.name)
+                    .fontWeight(.medium)
+                Text(domain.provider.name)
+                    .foregroundColor(.secondary)
+                    .font(.caption)
+            }
+            
+            Spacer()
+            
+            StatusBadgeView(status: domain.status)
+                .padding(.trailing, 8)
+            
+            Button("Manage", action: onManage)
+                .buttonStyle(.bordered)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Color(NSColor.controlBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+struct ActivityRowView: View {
+    let activity: DashboardViewModel.ActivityItem
+    
+    var body: some View {
+        HStack {
+            Image(systemName: activity.icon)
+                .foregroundStyle(.accentColor)
+                .frame(width: 24, height: 24)
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text(activity.title)
+                    .fontWeight(.medium)
+                Text(activity.timestamp.formatted())
+                    .foregroundColor(.secondary)
+                    .font(.caption)
+            }
+            
+            Spacer()
+            
+            Text(activity.domain)
+                .foregroundColor(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Color(NSColor.controlBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+// MARK: - Preview Provider
+#Preview {
+    VStack {
+        DomainRowView(
+            domain: Domain.preview,
+            onManage: {}
+        )
+        
+        ActivityRowView(
+            activity: DashboardViewModel.ActivityItem(
+                title: "DNS Record Updated",
+                timestamp: Date(),
+                domain: "example.com",
+                icon: "arrow.up.circle"
+            )
+        )
+    }
+    .padding()
+}
+
+=== End of ./dotDNS/Features/Dashboard/Views/DashboardView+Extensions.swift ===
+
+----------------------------------------------------------------
+
+=== File: ./dotDNS/Features/Dashboard/Views/SidebarView.swift ===
+
+import SwiftUI
+
+struct SidebarView: View {
+    @State private var selection: String? = "dashboard"
+    @State private var providers: [Provider] = []
+    
+    var body: some View {
+        List(selection: $selection) {
+            Section("General") {
+                NavigationLink(
+                    destination: DashboardView(),
+                    tag: "dashboard",
+                    selection: $selection
+                ) {
+                    Label("Dashboard", systemImage: "gauge")
+                }
+                
+                NavigationLink(
+                    destination: ProvidersView(),
+                    tag: "providers",
+                    selection: $selection
+                ) {
+                    Label("Providers", systemImage: "server.rack")
+                }
+            }
+            
+            Section("DNS Providers") {
+                ForEach(providers) { provider in
+                    NavigationLink(
+                        destination: Text(provider.name),
+                        tag: provider.id.uuidString,
+                        selection: $selection
+                    ) {
+                        Label(provider.name, systemImage: "network")
+                    }
+                }
+            }
+        }
+        .listStyle(SidebarListStyle())
+        .frame(minWidth: 200, maxWidth: 300)
+    }
+}
+
+=== End of ./dotDNS/Features/Dashboard/Views/SidebarView.swift ===
+
+----------------------------------------------------------------
+
+=== File: ./dotDNS/Features/Dashboard/Views/StatusBadgeView.swift ===
+
+import SwiftUI
+
+struct StatusBadgeView: View {
+    let status: DomainStatus
+    
+    var body: some View {
+        Text(status.rawValue)
+            .font(.caption)
+            .foregroundStyle(.white)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(backgroundColor)
+            .clipShape(Capsule())
+    }
+    
+    private var backgroundColor: Color {
+        switch status {
+        case .active:
+            return .green
+        case .inactive:
+            return .red
+        case .transferring:
+            return .orange
+        }
+    }
+}
+
+#Preview {
+    HStack {
+        StatusBadgeView(status: .active)
+        StatusBadgeView(status: .inactive)
+        StatusBadgeView(status: .transferring)
+    }
+    .padding()
+}
+=== End of ./dotDNS/Features/Dashboard/Views/StatusBadgeView.swift ===
+
+----------------------------------------------------------------
+
+=== File: ./dotDNS/Utils/Constants.swift ===
+
+import Foundation
+
+enum Constants {
+    enum API {
+        static let baseURL = "https://api.example.com"
+        static let version = "v1"
+    }
+    
+    enum UI {
+        static let minWindowWidth: CGFloat = 800
+        static let minWindowHeight: CGFloat = 600
+        static let sidebarWidth: CGFloat = 200
+    }
+}
+
+=== End of ./dotDNS/Utils/Constants.swift ===
+
+----------------------------------------------------------------
+
+=== File: ./dotDNS/Models/CloudflareModels.swift ===
+
+import Foundation
+
+// MARK: - Credentials
+struct CloudflareCredentials: Codable {
+    let token: String?
+    let email: String?
+    let globalApiKey: String?
+    
+    init(token: String? = nil, email: String? = nil, globalApiKey: String? = nil) {
+        self.token = token
+        self.email = email
+        self.globalApiKey = globalApiKey
+    }
+    
+    static func withToken(_ token: String) -> CloudflareCredentials {
+        CloudflareCredentials(token: token)
+    }
+    
+    static func withGlobalKey(email: String, key: String) -> CloudflareCredentials {
+        CloudflareCredentials(email: email, globalApiKey: key)
+    }
+}
+
+// MARK: - API Response Models
+struct CloudflareResponse<T: Codable>: Codable {
+    let success: Bool
+    let errors: [CloudflareAPIError]
+    let messages: [String]
+    let result: T?
+}
+
+struct CloudflareAPIError: Codable {
+    let code: Int
+    let message: String
+}
+
+struct CloudflareTokenStatus: Codable {
+    let id: String
+    let status: String
+    let type: String?
+}
+
+struct CloudflareUserDetails: Codable {
+    let id: String
+    let email: String
+    let firstName: String?
+    let lastName: String?
+    
+    enum CodingKeys: String, CodingKey {
+        case id, email
+        case firstName = "first_name"
+        case lastName = "last_name"
+    }
+    
+    var fullName: String {
+        [firstName, lastName].compactMap { $0 }.joined(separator: " ")
+    }
+}
+
+// MARK: - Error Types
+enum CloudflareServiceError: LocalizedError {
+    case invalidCredentials
+    case apiError(String)
+    case rateLimitExceeded
+    case networkError(String)
+    
+    var errorDescription: String? {
+        switch self {
+        case .invalidCredentials:
+            return "Invalid API credentials. Please check your API token or key."
+        case .apiError(let message):
+            return "Cloudflare API Error: \(message)"
+        case .rateLimitExceeded:
+            return "Rate limit exceeded. Please try again later."
+        case .networkError(let message):
+            return "Network Error: \(message)"
+        }
+    }
+}
+
+=== End of ./dotDNS/Models/CloudflareModels.swift ===
+
+----------------------------------------------------------------
+
+=== File: ./dotDNS/Models/Provider.swift ===
+
+import Foundation
+
+struct Provider: Identifiable, Hashable, Codable {
+    let id: UUID
+    var name: String
+    var type: ProviderType
+    var isConnected: Bool
+    var email: String?
+    var credentials: ProviderCredentials?
+    
+    init(id: UUID = UUID(), name: String, type: ProviderType, isConnected: Bool = false, email: String? = nil, credentials: ProviderCredentials? = nil) {
+        self.id = id
+        self.name = name
+        self.type = type
+        self.isConnected = isConnected
+        self.email = email
+        self.credentials = credentials
+    }
+    
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
+    
+    static func == (lhs: Provider, rhs: Provider) -> Bool {
+        lhs.id == rhs.id
+    }
+}
+
+enum ProviderType: String, Codable, CaseIterable {
+    case cloudflare = "Cloudflare"
+    case nameDotCom = "Name.com"
+    case godaddy = "GoDaddy"
+    case route53 = "AWS Route53"
+}
+
+enum ProviderCredentials: Codable {
+    case cloudflare(CloudflareCredentials)
+    
+    private enum CodingKeys: String, CodingKey {
+        case type, credentials
+    }
+    
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        switch self {
+        case .cloudflare(let credentials):
+            try container.encode("cloudflare", forKey: .type)
+            try container.encode(credentials, forKey: .credentials)
+        }
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let type = try container.decode(String.self, forKey: .type)
+        switch type {
+        case "cloudflare":
+            let credentials = try container.decode(CloudflareCredentials.self, forKey: .credentials)
+            self = .cloudflare(credentials)
+        default:
+            throw DecodingError.dataCorruptedError(forKey: .type, in: container, debugDescription: "Unknown provider type")
+        }
+    }
+}
+
+// Preview Extension
+extension Provider {
+    static var preview: Provider {
+        Provider(
+            name: "Cloudflare",
+            type: .cloudflare,
+            isConnected: true,
+            email: "test@example.com"
+        )
+    }
+}
+
+=== End of ./dotDNS/Models/Provider.swift ===
+
+----------------------------------------------------------------
+
+=== File: ./dotDNS/Models/Domain.swift ===
+
+import Foundation
+
+struct Domain: Identifiable {
+    let id: UUID = UUID()
+    var name: String
+    var provider: Provider
+    var status: DomainStatus
+    var recordCount: Int
+}
+
+enum DomainStatus: String {
+    case active = "Active"
+    case inactive = "Inactive"
+    case transferring = "Transferring"
+}
+
+extension Domain {
+    static var preview: Domain {
+        Domain(name: "example.com", provider: .preview, status: .active, recordCount: 10)
+    }
+}
+
+=== End of ./dotDNS/Models/Domain.swift ===
+
+----------------------------------------------------------------
+
+=== File: ./dotDNS/Models/ProviderError.swift ===
+
+import Foundation
+
+enum ProviderError: LocalizedError {
+    case unsupportedProvider
+    case invalidCredentials
+    case apiError(String)
+    case networkError(NetworkError)
+    
+    var errorDescription: String? {
+        switch self {
+        case .unsupportedProvider:
+            return "This DNS provider is not yet supported"
+        case .invalidCredentials:
+            return "Invalid provider credentials"
+        case .apiError(let message):
+            return "Provider API Error: \(message)"
+        case .networkError(let error):
+            return error.localizedDescription
+        }
+    }
+}
+
+=== End of ./dotDNS/Models/ProviderError.swift ===
+
+----------------------------------------------------------------
+
+=== File: ./dotDNS/Models/DNSRecord.swift ===
+
+import Foundation
+
+enum RecordType: String, CaseIterable {
+    case a = "A"
+    case aaaa = "AAAA"
+    case cname = "CNAME"
+    case mx = "MX"
+    case txt = "TXT"
+    case srv = "SRV"
+}
+
+struct DNSRecord: Identifiable {
+    let id: UUID = UUID()
+    var type: RecordType
+    var name: String
+    var content: String
+    var ttl: Int
+    var priority: Int?
+    var provider: Provider
+    
+    init(type: RecordType, name: String, content: String, ttl: Int, priority: Int? = nil, provider: Provider) {
+        self.type = type
+        self.name = name
+        self.content = content
+        self.ttl = ttl
+        self.priority = priority
+        self.provider = provider
+    }
+}
+
+// Preview helper
+extension DNSRecord {
+    static var preview: DNSRecord {
+        DNSRecord(
+            type: .a,
+            name: "example.com",
+            content: "192.168.1.1",
+            ttl: 3600,
+            provider: Provider.preview
+        )
+    }
+}
+
+=== End of ./dotDNS/Models/DNSRecord.swift ===
+
+----------------------------------------------------------------
+
+=== File: ./dotDNS/dotDNSApp.swift ===
+
+// dotDNSApp.swift
+import SwiftUI
+
+@main
+struct dotDNSApp: App {
+    var body: some Scene {
+        WindowGroup {
+            ContentView()
+                .frame(
+                    minWidth: Constants.UI.minWindowWidth,
+                    minHeight: Constants.UI.minWindowHeight
+                )
+        }
+        .windowStyle(.hiddenTitleBar)
+        .windowToolbarStyle(.unified)
+    }
+}
+=== End of ./dotDNS/dotDNSApp.swift ===
+
+----------------------------------------------------------------
+
+=== File: ./dotDNS/ContentView.swift ===
+
+//
+//  ContentView.swift
+//  dotDNS
+//
+//  Created by Rahul VR on 07/12/24.
+//
+
+import SwiftUI
+
+struct ContentView: View {
+    var body: some View {
+        NavigationView {
+            SidebarView()
+            DashboardView()
+        }
+    }
+}
+
+=== End of ./dotDNS/ContentView.swift ===
+
+----------------------------------------------------------------
+
+=== File: ./dotDNS/Services/Providers/CloudflareService.swift ===
+
+import Foundation
+
+class CloudflareService {
+    private let baseURL = "https://api.cloudflare.com/client/v4"
+    private var credentials: CloudflareCredentials
+    private let networkManager: NetworkManager
+    
+    init(credentials: CloudflareCredentials, networkManager: NetworkManager = .shared) {
+        self.credentials = credentials
+        self.networkManager = networkManager
+    }
+    
+    private func makeRequest<T: Decodable>(
+        endpoint: String,
+        method: String = "GET",
+        body: Data? = nil
+    ) async throws -> T {
+        guard let url = URL(string: "\(baseURL)\(endpoint)") else {
+            throw NetworkError.invalidURL
+        }
+        
+        var headers = [
+            "Content-Type": "application/json"
+        ]
+        
+        if let token = credentials.token {
+            headers["Authorization"] = "Bearer \(token)"
+        } else if let email = credentials.email, let apiKey = credentials.globalApiKey {
+            headers["X-Auth-Email"] = email
+            headers["X-Auth-Key"] = apiKey
+        } else {
+            throw CloudflareServiceError.invalidCredentials
+        }
+        
+        return try await networkManager.request(
+            url,
+            method: method,
+            headers: headers,
+            body: body
+        )
+    }
+    
+    func verifyCredentials() async throws {
+        if let token = credentials.token {
+            let endpoint = "/user/tokens/verify"
+            let response: TokenVerifyResponse = try await makeRequest(endpoint: endpoint)
+            
+            guard response.success,
+                  let status = response.result.status,
+                  status == "active" else {
+                throw CloudflareServiceError.invalidCredentials
+            }
+        } else {
+            // Verify Global API Key by fetching user details
+            try await getUserDetails()
+        }
+    }
+    
+    func getUserDetails() async throws -> UserDetailsResponse.UserDetails {
+        let endpoint = "/user"
+        let response: UserDetailsResponse = try await makeRequest(endpoint: endpoint)
+        
+        guard response.success,
+              let userDetails = response.result else {
+            throw CloudflareServiceError.apiError("Failed to get user details")
+        }
+        
+        return userDetails
+    }
+}
+
+// MARK: - Response Types
+extension CloudflareService {
+    struct TokenVerifyResponse: Codable {
+        let success: Bool
+        let errors: [APIError]
+        let messages: [Message]
+        let result: TokenStatus
+        
+        struct TokenStatus: Codable {
+            let id: String
+            let status: String?
+            let type: String?
+        }
+        
+        struct APIError: Codable {
+            let code: Int
+            let message: String
+        }
+        
+        struct Message: Codable {
+            let code: Int?
+            let message: String
+        }
+    }
+    
+    struct UserDetailsResponse: Codable {
+        let success: Bool
+        let errors: [APIError]
+        let messages: [String]
+        let result: UserDetails?
+        
+        struct UserDetails: Codable {
+            let id: String
+            let email: String
+            let firstName: String?
+            let lastName: String?
+            
+            enum CodingKeys: String, CodingKey {
+                case id, email
+                case firstName = "first_name"
+                case lastName = "last_name"
+            }
+            
+            var fullName: String {
+                [firstName, lastName].compactMap { $0 }.joined(separator: " ")
+            }
+        }
+        
+        struct APIError: Codable {
+            let code: Int
+            let message: String
+        }
+    }
+}
+
+=== End of ./dotDNS/Services/Providers/CloudflareService.swift ===
+
+----------------------------------------------------------------
+
+=== File: ./dotDNS/Services/NetworkManager.swift ===
+
+import Foundation
+import Network
+
+enum NetworkError: LocalizedError {
+    case noInternetConnection
+    case dnsResolutionFailed
+    case invalidURL
+    case serverError(Int)
+    case decodingError(String)
+    case unknown(Error)
+    
+    var errorDescription: String? {
+        switch self {
+        case .noInternetConnection:
+            return "No internet connection. Please check your network settings."
+        case .dnsResolutionFailed:
+            return "Unable to connect to server. Please check your internet connection."
+        case .invalidURL:
+            return "Invalid URL configuration."
+        case .serverError(let code):
+            return "Server error occurred (Code: \(code))"
+        case .decodingError(let message):
+            return "Data format error: \(message)"
+        case .unknown(let error):
+            return "An error occurred: \(error.localizedDescription)"
+        }
+    }
+}
+
+@MainActor
+class NetworkManager: ObservableObject {
+    static let shared = NetworkManager()
+    private let monitor = NWPathMonitor()
+    private let monitorQueue = DispatchQueue(label: "NetworkMonitor")
+    @Published var isConnected = false
+    
+    private init() {
+        startMonitoring()
+    }
+    
+    private func startMonitoring() {
+        monitor.pathUpdateHandler = { [weak self] path in
+            Task { @MainActor in
+                self?.isConnected = path.status == .satisfied
+            }
+        }
+        monitor.start(queue: monitorQueue)
+    }
+    
+    deinit {
+        monitor.cancel()
+    }
+    
+    func checkConnection() async throws {
+        guard isConnected else {
+            throw NetworkError.noInternetConnection
+        }
+    }
+    
+    func request<T: Decodable>(
+        _ url: URL,
+        method: String = "GET",
+        headers: [String: String] = [:],
+        body: Data? = nil
+    ) async throws -> T {
+        try await checkConnection()
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.allHTTPHeaderFields = headers
+        request.httpBody = body
+        request.timeoutInterval = 30
+        
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw NetworkError.unknown(NSError(domain: "Invalid Response", code: -1))
+            }
+            
+            // Print response for debugging
+            if let responseString = String(data: data, encoding: .utf8) {
+                print("Response data: \(responseString)")
+            }
+            
+            switch httpResponse.statusCode {
+            case 200...299:
+                let decoder = JSONDecoder()
+                decoder.keyDecodingStrategy = .convertFromSnakeCase
+                do {
+                    return try decoder.decode(T.self, from: data)
+                } catch let decodingError as DecodingError {
+                    let errorDescription = self.describingDecodingError(decodingError)
+                    throw NetworkError.decodingError(errorDescription)
+                }
+            case 401, 403:
+                throw NetworkError.serverError(httpResponse.statusCode)
+            case 404:
+                throw NetworkError.dnsResolutionFailed
+            default:
+                throw NetworkError.serverError(httpResponse.statusCode)
+            }
+        } catch let error as NetworkError {
+            throw error
+        } catch {
+            throw NetworkError.unknown(error)
+        }
+    }
+    
+    private func describingDecodingError(_ error: DecodingError) -> String {
+        switch error {
+        case .dataCorrupted(let context):
+            return "Data corrupted: \(context.debugDescription)"
+        case .keyNotFound(let key, let context):
+            return "Key '\(key.stringValue)' not found: \(context.debugDescription)"
+        case .typeMismatch(let type, let context):
+            return "Type '\(type)' mismatch: \(context.debugDescription)"
+        case .valueNotFound(let type, let context):
+            return "Value of type '\(type)' not found: \(context.debugDescription)"
+        @unknown default:
+            return "Unknown decoding error: \(error.localizedDescription)"
+        }
+    }
+}
+
+=== End of ./dotDNS/Services/NetworkManager.swift ===
+
+----------------------------------------------------------------
+
+=== File: ./dotDNS/Services/KeychainService.swift ===
+
+// Services/KeychainService.swift
+import Foundation
+import Security
+
+enum KeychainError: Error {
+    case duplicateEntry
+    case unknown(OSStatus)
+    case itemNotFound
+    case invalidData
+}
+
+class KeychainService {
+    private static let service = "com.yourdomain.dotDNS"
+    
+    static func saveCredentials(key: String, value: String) throws {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: key,
+            kSecValueData as String: value.data(using: .utf8)!
+        ]
+        
+        let status = SecItemAdd(query as CFDictionary, nil)
+        
+        switch status {
+        case errSecSuccess:
+            return
+        case errSecDuplicateItem:
+            // Item already exists, update it
+            let updateQuery: [String: Any] = [
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrService as String: service,
+                kSecAttrAccount as String: key
+            ]
+            
+            let attributes: [String: Any] = [
+                kSecValueData as String: value.data(using: .utf8)!
+            ]
+            
+            let updateStatus = SecItemUpdate(updateQuery as CFDictionary, attributes as CFDictionary)
+            guard updateStatus == errSecSuccess else {
+                throw KeychainError.unknown(updateStatus)
+            }
+        default:
+            throw KeychainError.unknown(status)
+        }
+    }
+    
+    static func retrieveCredentials(key: String) throws -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: key,
+            kSecReturnData as String: true
+        ]
+        
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        
+        switch status {
+        case errSecSuccess:
+            guard let data = result as? Data,
+                  let value = String(data: data, encoding: .utf8) else {
+                throw KeychainError.invalidData
+            }
+            return value
+        case errSecItemNotFound:
+            return nil
+        default:
+            throw KeychainError.unknown(status)
+        }
+    }
+    
+    static func deleteCredentials(key: String) throws {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: key
+        ]
+        
+        let status = SecItemDelete(query as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw KeychainError.unknown(status)
+        }
+    }
+    
+    static func clearAll() throws {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service
+        ]
+        
+        let status = SecItemDelete(query as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw KeychainError.unknown(status)
+        }
+    }
+}
+=== End of ./dotDNS/Services/KeychainService.swift ===
+
+----------------------------------------------------------------
+
+=== File: ./dotDNS/Services/ProviderStorage.swift ===
+
+import Foundation
+
+actor ProviderStorage {
+    static let shared = ProviderStorage()
+    private let defaults = UserDefaults.standard
+    private let providersKey = "stored_providers"
+    
+    private init() {}
+    
+    func saveProviders(_ providers: [Provider]) async throws {
+        let encoder = JSONEncoder()
+        let data = try encoder.encode(providers)
+        defaults.set(data, forKey: providersKey)
+    }
+    
+    func loadProviders() async throws -> [Provider] {
+        guard let data = defaults.data(forKey: providersKey) else {
+            return []
+        }
+        
+        let decoder = JSONDecoder()
+        return try decoder.decode([Provider].self, from: data)
+    }
+    
+    func addProvider(_ provider: Provider) async throws {
+        var providers = try await loadProviders()
+        providers.append(provider)
+        try await saveProviders(providers)
+    }
+    
+    func updateProvider(_ provider: Provider) async throws {
+        var providers = try await loadProviders()
+        if let index = providers.firstIndex(where: { $0.id == provider.id }) {
+            providers[index] = provider
+            try await saveProviders(providers)
+        }
+    }
+    
+    func removeProvider(_ provider: Provider) async throws {
+        var providers = try await loadProviders()
+        providers.removeAll { $0.id == provider.id }
+        try await saveProviders(providers)
+    }
+}
+
+=== End of ./dotDNS/Services/ProviderStorage.swift ===
+
+----------------------------------------------------------------
+
